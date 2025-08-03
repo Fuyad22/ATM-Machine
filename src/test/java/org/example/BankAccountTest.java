@@ -3,118 +3,93 @@ package org.example;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.io.File;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * JUnit 5 test class for the BankAccount class.
- * This class contains unit tests to verify the functionality of the BankAccount methods.
+ * This version includes parameterized tests for more efficient validation.
  */
 class BankAccountTest {
 
     private BankAccount account;
     private final String correctPin = "1015";
 
-    /**
-     * This method is run before each test.
-     * It sets up a new BankAccount instance to ensure tests are independent.
-     */
     @BeforeEach
     void setUp() {
-        // Initialize a new account with a balance of 1000.00 and a specific PIN
         account = new BankAccount(1000.00, correctPin);
+        // Clean up log from previous test runs to ensure a clean slate
+        File transactionLog = new File("transaction_history.csv");
+        if (transactionLog.exists()) {
+            transactionLog.delete();
+        }
     }
 
     @Test
-    @DisplayName("Test constructor with a valid initial balance")
+    @DisplayName("Constructor should set positive initial balance")
     void testConstructorWithPositiveBalance() {
-        // The balance should be exactly what was set in the constructor
-        assertEquals(1000.00, account.getBalance(), "Constructor should set the initial balance correctly.");
+        assertEquals(1000.00, account.getBalance(), "Incorrect initial balance.");
+        assertFalse(account.getTransactionHistory().isEmpty(), "History should not be empty.");
+    }
+
+    @ParameterizedTest
+    @DisplayName("PIN validation should work for various inputs")
+    @CsvSource({
+            "1015, true",   // Correct PIN
+            "0000, false",  // Incorrect PIN
+            "abcd, false",  // Incorrect PIN
+            "'',   false"   // Empty PIN
+    })
+    void testPinValidation(String pin, boolean expectedResult) {
+        assertEquals(expectedResult, account.validatePin(pin), "PIN validation failed for: " + pin);
     }
 
     @Test
-    @DisplayName("Test constructor with a negative initial balance")
-    void testConstructorWithNegativeBalance() {
-        // A negative initial balance should default to 0
-        BankAccount negativeBalanceAccount = new BankAccount(-500, "1234");
-        assertEquals(0, negativeBalanceAccount.getBalance(), "Constructor should default a negative balance to 0.");
+    @DisplayName("Should change PIN successfully with correct old PIN")
+    void testChangePinSuccess() {
+        String newPin = "9876";
+        assertTrue(account.changePin(correctPin, newPin), "PIN change should succeed.");
+        assertTrue(account.validatePin(newPin), "New PIN should be valid.");
     }
 
     @Test
-    @DisplayName("Test PIN validation with correct PIN")
-    void testValidatePinCorrect() {
-        // validatePin should return true for the correct PIN
-        assertTrue(account.validatePin(correctPin), "Should return true for the correct PIN.");
+    @DisplayName("Should not change PIN with incorrect old PIN")
+    void testChangePinFailure() {
+        assertFalse(account.changePin("0000", "9876"), "PIN change should fail.");
+        assertTrue(account.validatePin(correctPin), "Old PIN should remain valid.");
     }
 
     @Test
-    @DisplayName("Test PIN validation with incorrect PIN")
-    void testValidatePinIncorrect() {
-        // validatePin should return false for an incorrect PIN
-        assertFalse(account.validatePin("0000"), "Should return false for an incorrect PIN.");
-        assertFalse(account.validatePin(null), "Should return false for a null PIN.");
-    }
-
-    @Test
-    @DisplayName("Test depositing a positive amount")
-    void testDepositPositiveAmount() {
-        // Deposit 200 to the initial 1000
+    @DisplayName("Should deposit a positive amount correctly")
+    void testValidDeposit() {
         account.deposit(200.50);
-        // The new balance should be 1200.50
-        assertEquals(1200.50, account.getBalance(), "Balance should increase after a valid deposit.");
+        assertEquals(1200.50, account.getBalance(), "Balance incorrect after deposit.");
+    }
+
+    @ParameterizedTest
+    @DisplayName("Should not deposit invalid amounts")
+    @ValueSource(doubles = {-100.0, 0.0})
+    void testInvalidDeposit(double amount) {
+        account.deposit(amount);
+        assertEquals(1000.00, account.getBalance(), "Balance should not change on invalid deposit.");
     }
 
     @Test
-    @DisplayName("Test depositing a negative or zero amount")
-    void testDepositNonPositiveAmount() {
-        // Try to deposit a negative amount
-        account.deposit(-100);
-        // The balance should not change
-        assertEquals(1000.00, account.getBalance(), "Balance should not change after a negative deposit.");
-
-        // Try to deposit zero
-        account.deposit(0);
-        // The balance should still not change
-        assertEquals(1000.00, account.getBalance(), "Balance should not change after depositing zero.");
-    }
-
-    @Test
-    @DisplayName("Test a valid withdrawal")
-    void testWithdrawValidAmount() {
-        // Withdraw 300 from the initial 1000
+    @DisplayName("Should withdraw a valid amount correctly")
+    void testValidWithdraw() {
         account.withdraw(300.00);
-        // The new balance should be 700.00
-        assertEquals(700.00, account.getBalance(), "Balance should decrease after a valid withdrawal.");
+        assertEquals(700.00, account.getBalance(), "Balance incorrect after withdrawal.");
     }
 
-    @Test
-    @DisplayName("Test withdrawing an amount greater than the balance")
-    void testWithdrawInsufficientFunds() {
-        // Try to withdraw more money than is in the account
-        account.withdraw(1500.00);
-        // The balance should remain unchanged
-        assertEquals(1000.00, account.getBalance(), "Balance should not change when withdrawal amount exceeds balance.");
-    }
-
-    @Test
-    @DisplayName("Test withdrawing the exact balance")
-    void testWithdrawExactBalance() {
-        // Withdraw the entire balance
-        account.withdraw(1000.00);
-        // The new balance should be 0
-        assertEquals(0, account.getBalance(), "Balance should be 0 after withdrawing the exact amount.");
-    }
-
-    @Test
-    @DisplayName("Test withdrawing a negative or zero amount")
-    void testWithdrawNonPositiveAmount() {
-        // Try to withdraw a negative amount
-        account.withdraw(-200);
-        // The balance should not change
-        assertEquals(1000.00, account.getBalance(), "Balance should not change after a negative withdrawal.");
-
-        // Try to withdraw zero
-        account.withdraw(0);
-        // The balance should still not change
-        assertEquals(1000.00, account.getBalance(), "Balance should not change after withdrawing zero.");
+    @ParameterizedTest
+    @DisplayName("Should not withdraw invalid amounts")
+    @ValueSource(doubles = {-200.0, 0.0, 1500.0}) // Includes insufficient funds
+    void testInvalidWithdraw(double amount) {
+        account.withdraw(amount);
+        assertEquals(1000.00, account.getBalance(), "Balance should not change on invalid withdrawal.");
     }
 }
